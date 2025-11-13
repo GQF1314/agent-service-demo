@@ -27,6 +27,32 @@ import { genRecipe, GenRecipeInputSchema } from "./endpoint/gen_recipe";
 import z from "zod";
 import { collectTextFromStream } from "./utils/stream-text-collector";
 
+// Dialogflow CX WebhookRequest 类型定义
+interface DialogflowWebhookRequest {
+  detectIntentResponseId: string;
+  languageCode?: string;
+  text?: string;
+  transcript?: string;
+  fulfillmentInfo?: any;
+  intentInfo?: any;
+  pageInfo?: any;
+  sessionInfo?: {
+    session?: string;
+    parameters?: Record<string, any>;
+  };
+}
+
+// Dialogflow CX WebhookResponse 类型定义
+interface DialogflowWebhookResponse {
+  fulfillmentResponse?: {
+    messages: Array<{
+      text?: {
+        text: string[];
+      };
+    }>;
+  };
+}
+
 let buildInfoFromFile = {};
 try {
   buildInfoFromFile = JSON.parse(
@@ -161,6 +187,288 @@ app.post("/agent/v1/recipe/gen", async (c) => {
   }
 })
 
+// Dialogflow CX Webhook 接口
+app.post("/agent/v1/chat/completion/dialogflow-webhook", async (c) => {
+  const logger = c.var.logger;
+  const startTime = Date.now();
+  const requestId = `webhook-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+  try {
+    // 1. 解析 Dialogflow WebhookRequest
+    const webhookRequest: DialogflowWebhookRequest = await c.req.json();
+
+    // 打印完整的请求体,方便检索和调试
+    logger.info({
+      msg: "[DIALOGFLOW-WEBHOOK-REQUEST] Incoming request",
+      requestId: requestId,
+      timestamp: new Date().toISOString(),
+      fullRequest: webhookRequest,
+      detectIntentResponseId: webhookRequest.detectIntentResponseId,
+      languageCode: webhookRequest.languageCode,
+      session: webhookRequest.sessionInfo?.session,
+      intentName: webhookRequest.intentInfo?.displayName,
+      pageName: webhookRequest.pageInfo?.displayName,
+    });
+
+    // 2. 提取用户输入文本
+    const userInput = webhookRequest.text || webhookRequest.transcript;
+
+    logger.info({
+      msg: "[DIALOGFLOW-WEBHOOK] Extracted user input",
+      requestId: requestId,
+      userInput: userInput,
+      inputSource: webhookRequest.text ? "text" : "transcript",
+    });
+
+    if (!userInput) {
+      logger.error({
+        msg: "[DIALOGFLOW-WEBHOOK-ERROR] No user input text found",
+        requestId: requestId,
+        webhookRequest: webhookRequest,
+      });
+      const errorResponse: DialogflowWebhookResponse = {
+        fulfillmentResponse: {
+          messages: [
+            {
+              text: {
+                text: ["Sorry, I couldn't understand your input. Please try again."]
+              }
+            }
+          ]
+        }
+      };
+
+      logger.info({
+        msg: "[DIALOGFLOW-WEBHOOK-RESPONSE] Sending error response (no input)",
+        requestId: requestId,
+        response: errorResponse,
+      });
+
+      return c.json(errorResponse);
+    }
+
+    // 3. 写死的参数(复用 /text 接口的配置)
+    const FIXED_FAMILY_ID = "5c5686b5-d5dc-4a21-bbbc-08a74c03e082";
+    const FIXED_USER_ID = "25beada0-3fb0-44f7-bc37-63b67a633695";
+    const FIXED_ROLE_ID = "d5095d10-079c-4566-bfc6-1a07f8746e85";
+    const FIXED_TIMEZONE = "UTC";
+
+    // 4. 生成会话ID和追踪ID
+    const conversationId = webhookRequest.sessionInfo?.session
+      ? `dialogflow-${webhookRequest.sessionInfo.session.split('/').pop()}`
+      : `conv-${Date.now()}`;
+    const traceId = `dialogflow-${webhookRequest.detectIntentResponseId}`;
+
+    logger.info({
+      msg: "[DIALOGFLOW-WEBHOOK] Generated IDs",
+      requestId: requestId,
+      conversationId: conversationId,
+      traceId: traceId,
+    });
+
+    // 5. 构造内部请求参数
+    const params: IMessageReqParams = {
+      environment: {
+        family_info: {
+          family_id: FIXED_FAMILY_ID,
+          name: "Family",
+          roles: [
+            {
+              family_role_id: FIXED_ROLE_ID,
+              user_id: FIXED_USER_ID,
+              role_name: "User",
+              role_nickname: "User",
+              birthday: null,
+            }
+          ],
+          location: null,
+          locale: webhookRequest.languageCode || "en-US",
+        },
+        user_brief: {
+          task: {
+            task_lists: [],
+          },
+          calendar: {
+            default_calendar: null,
+          },
+        },
+        chat_info: {
+          conversation_id: conversationId,
+          turn_id: `turn-${Date.now()}`,
+          user_ui_message_id: `msg-user-${Date.now()}`,
+          assistant_ui_message_id: `msg-assistant-${Date.now()}`,
+        },
+      },
+      recent_messages: [
+        {
+          role: MessageRole.USER,
+          content: [
+            {
+              type: SegmentType.TEXT,
+              text: userInput,
+            }
+          ],
+        }
+      ],
+    };
+
+    // 6. 创建header上下文
+    const headerContext: IHeaderContext = {
+      familyId: FIXED_FAMILY_ID,
+      userId: FIXED_USER_ID,
+      timeZone: FIXED_TIMEZONE,
+      traceId: traceId,
+    };
+
+    // 7. 创建请求计时器
+    const requestTimer = new RequestTimer(logger, headerContext.traceId, conversationId);
+
+    logger.info({
+      msg: "[DIALOGFLOW-WEBHOOK] Calling agent with parameters",
+      requestId: requestId,
+      internalParams: {
+        conversationId: conversationId,
+        traceId: traceId,
+        familyId: FIXED_FAMILY_ID,
+        userId: FIXED_USER_ID,
+        locale: webhookRequest.languageCode || "en-US",
+        userMessage: userInput,
+      },
+    });
+
+    // 8. 调用agent获取stream
+    const stream = agentEntry.handleSession(params, {
+      signal: c.req.raw.signal,
+      headerContext,
+      logger,
+      requestTimer,
+    });
+
+    // 9. 阻塞等待stream完成,收集所有文本
+    logger.info({
+      msg: "[DIALOGFLOW-WEBHOOK] Waiting for agent response stream",
+      requestId: requestId,
+    });
+
+    const resultText = await collectTextFromStream(stream);
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+
+    // 如果结果为空,记录警告
+    if (!resultText || resultText.length === 0) {
+      logger.warn({
+        msg: "[DIALOGFLOW-WEBHOOK-WARNING] Empty response from agent",
+        requestId: requestId,
+        note: "Agent returned empty text. This might indicate the agent did not generate any response.",
+      });
+    }
+
+    logger.info({
+      msg: "[DIALOGFLOW-WEBHOOK] Agent response received",
+      requestId: requestId,
+      responseText: resultText,
+      responseLength: resultText.length,
+      durationMs: duration,
+    });
+
+    // 10. 构造 Dialogflow WebhookResponse
+    const webhookResponse: DialogflowWebhookResponse = {
+      fulfillmentResponse: {
+        messages: [
+          {
+            text: {
+              text: [resultText]
+            }
+          }
+        ]
+      }
+    };
+
+    // 11. 记录完整的请求-响应日志(用于检索和调试)
+    logger.info({
+      msg: "=== [DIALOGFLOW-WEBHOOK-COMPLETE] Full Request-Response Log ===",
+      requestId: requestId,
+      timestamp: new Date().toISOString(),
+      request: {
+        fullWebhookRequest: webhookRequest,
+        detectIntentResponseId: webhookRequest.detectIntentResponseId,
+        languageCode: webhookRequest.languageCode,
+        session: webhookRequest.sessionInfo?.session,
+        userInput: userInput,
+        inputLength: userInput.length,
+        intentName: webhookRequest.intentInfo?.displayName,
+        pageName: webhookRequest.pageInfo?.displayName,
+      },
+      response: {
+        fullWebhookResponse: webhookResponse,
+        responseText: resultText,
+        textLength: resultText.length,
+        textPreview: resultText.substring(0, 200),
+      },
+      performance: {
+        startTime: startTime,
+        endTime: endTime,
+        durationMs: duration,
+        durationSec: (duration / 1000).toFixed(2),
+      },
+      internalContext: {
+        traceId: traceId,
+        conversationId: conversationId,
+        familyId: FIXED_FAMILY_ID,
+        userId: FIXED_USER_ID,
+      },
+    });
+
+    // 12. 简单的一行输入输出日志(便于快速查看)
+    logger.info(`[DIALOGFLOW-IO] RequestId=${requestId} | Input="${userInput}" | Output="${resultText}" | Duration=${duration}ms`);
+
+    return c.json(webhookResponse);
+
+  } catch (error) {
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+
+    // 记录详细的错误信息
+    logger.error({
+      msg: "=== [DIALOGFLOW-WEBHOOK-ERROR] Request Failed ===",
+      requestId: requestId,
+      timestamp: new Date().toISOString(),
+      error: errorStringify(error),
+      errorType: error instanceof Error ? error.constructor.name : typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+      performance: {
+        startTime: startTime,
+        endTime: endTime,
+        durationMs: duration,
+        durationSec: (duration / 1000).toFixed(2),
+      },
+    });
+
+    // 返回友好的错误消息给用户
+    const errorResponse: DialogflowWebhookResponse = {
+      fulfillmentResponse: {
+        messages: [
+          {
+            text: {
+              text: ["Sorry, I encountered an error processing your request. Please try again later."]
+            }
+          }
+        ]
+      }
+    };
+
+    logger.info({
+      msg: "[DIALOGFLOW-WEBHOOK-RESPONSE] Sending error response",
+      requestId: requestId,
+      errorResponse: errorResponse,
+    });
+
+    return c.json(errorResponse, 500);
+  }
+});
+
+
 // 新接口：阻塞式调用agent，返回文本结果
 app.post("/agent/v1/chat/completion/text", async (c) => {
   const logger = c.var.logger;
@@ -289,7 +597,7 @@ app.post("/agent/v1/chat/completion/text", async (c) => {
     const endTime = Date.now();
     const duration = endTime - startTime;
 
-    logger.error("=== [TEXT-ENDPOINT] Request Failed ===", {
+    logger.error({
       error: errorStringify(error),
       errorType: error instanceof Error ? error.constructor.name : typeof error,
       errorMessage: error instanceof Error ? error.message : String(error),
@@ -300,7 +608,7 @@ app.post("/agent/v1/chat/completion/text", async (c) => {
         durationMs: duration,
         durationSec: (duration / 1000).toFixed(2),
       },
-    });
+    }, "=== [TEXT-ENDPOINT] Request Failed ===");
 
     return c.json({
       success: false,
