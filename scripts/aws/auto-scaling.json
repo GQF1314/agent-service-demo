@@ -1,0 +1,8 @@
+{
+  "ServiceNamespace": "ecs",
+  "ResourceId": "service/domus-cluster/domus-agent",
+  "ScalableDimension": "ecs:service:DesiredCount",
+  "MinCapacity": 1,
+  "MaxCapacity": 2,
+  "RoleARN": "arn:aws:iam::194160272412:role/aws-service-role/application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService"
+}

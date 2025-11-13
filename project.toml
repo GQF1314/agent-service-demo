@@ -1,0 +1,6 @@
+[[build.env]]
+name = "GOOGLE_NODEJS_VERSION"
+value = "22"
+
+[[build.buildpacks]]
+uri = "gcr.io/buildpacks/nodejs"

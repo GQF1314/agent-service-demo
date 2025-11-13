@@ -1,0 +1,60 @@
+{
+  "name": "domus-agent",
+  "version": "0.1.0",
+  "bin": {
+    "domus-agent": "bin/domus-agent.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:clean": "rimraf dist && npm run build",
+    "watch": "tsc -w",
+    "test": "jest",
+    "cdk": "cdk",
+    "dev": "NODE_ENV=development ts-node-dev --respawn --transpile-only src/ecs-server.ts",
+    "start": "NODE_ENV=production node dist/src/ecs-server.js",
+    "start:dev": "NODE_ENV=development pnpm run dev",
+    "deploy": "NODE_ENV=$ENVIRONMENT node dist/src/ecs-server.js",
+    "dev:debug": "NODE_ENV=$ENVIRONMENT node --inspect=0.0.0.0:9229 dist/src/ecs-server.js",
+    "dev:debug-brk": "NODE_ENV=$ENVIRONMENT node --inspect-brk=0.0.0.0:9229 dist/src/ecs-server.ts"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.152",
+    "@types/config": "^3.3.5",
+    "@types/jest": "^29.5.14",
+    "@types/js-yaml": "^4.0.9",
+    "@types/json-to-pretty-yaml": "^1.2.1",
+    "@types/lodash": "^4.17.20",
+    "@types/lodash-es": "^4.17.12",
+    "@types/node": "22.7.9",
+    "aws-cdk": "2.1025.0",
+    "dotenv": "^17.2.1",
+    "esbuild": "^0.25.9",
+    "husky": "^9.1.7",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "~5.6.3"
+  },
+  "dependencies": {
+    "@ai-sdk/amazon-bedrock": "^3.0.22",
+    "@hono/node-server": "^1.19.0",
+    "@openrouter/ai-sdk-provider": "1.0.0-beta.6",
+    "ai": "5.0.76",
+    "best-effort-json-parser": "^1.2.1",
+    "config": "^4.1.1",
+    "date-fns": "^4.1.0",
+    "date-fns-tz": "^3.2.0",
+    "fast-xml-parser": "^5.2.5",
+    "global-agent": "^3.0.0",
+    "hono": "^4.9.2",
+    "hono-pino": "^0.10.2",
+    "js-yaml": "^4.1.0",
+    "lodash": "^4.17.21",
+    "pino": "^9.9.0",
+    "pino-http": "^10.5.0",
+    "pino-pretty": "^13.1.1",
+    "uuid": "^11.1.0",
+    "zod": "^3.25.67"
+  }
+}

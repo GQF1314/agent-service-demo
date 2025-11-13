@@ -1,0 +1,34 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo "Logging in to Amazon ECR..."
+      - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - REPOSITORY_URI=$ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/domus-agent
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | DOCKER_CONTEXT= DOCKER_HOST= docker login --username AWS --password-stdin "$REPOSITORY_URI"
+      - COMMIT_HASH=$(echo "$CODEBUILD_RESOLVED_SOURCE_VERSION" | cut -c 1-12)
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+  build:
+    commands:
+      - echo "Build started on $(date)"
+      - docker --version
+      - echo "Building the Docker image..."
+      - export NPM_REGISTRY=${NPM_REGISTRY:-https://registry.npmmirror.com}
+      - 'echo "Using NPM registry: $NPM_REGISTRY"'
+      - GIT_HASH=$(git rev-parse HEAD) ; GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD) ; BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+      - 'ls -lah && ls -lah docker && test -f docker/Dockerfile && echo ok:Dockerfile'
+      - 'DOCKER_CONTEXT= DOCKER_HOST= DOCKER_BUILDKIT=1 BUILDKIT_PROGRESS=plain docker build --network=host --pull --build-arg NPM_REGISTRY="$NPM_REGISTRY" --build-arg GIT_HASH="$GIT_HASH" --build-arg GIT_BRANCH="$GIT_BRANCH" --build-arg BUILD_TIME="$BUILD_TIME" -t "$REPOSITORY_URI:latest" -f docker/Dockerfile .'
+      - DOCKER_CONTEXT= DOCKER_HOST= docker tag "$REPOSITORY_URI:latest" "$REPOSITORY_URI:$IMAGE_TAG"
+  post_build:
+    commands:
+      - echo "Build completed on $(date)"
+      - echo "Pushing the Docker images..."
+      - DOCKER_CONTEXT= DOCKER_HOST= docker push "$REPOSITORY_URI:latest"
+      - DOCKER_CONTEXT= DOCKER_HOST= docker push "$REPOSITORY_URI:$IMAGE_TAG"
+      - echo "Writing image definitions file..."
+      - printf '[{"name":"domus-agent","imageUri":"%s"}]' "$REPOSITORY_URI:$IMAGE_TAG" > imagedefinitions.json
+
+artifacts:
+  files:
+    - imagedefinitions.json

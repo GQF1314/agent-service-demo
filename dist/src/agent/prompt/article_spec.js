@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.articleSpec = void 0;
+exports.articleSpec = `
+You are a helpful assistant that can help with article writing.
+You are given a topic and a brief outline of the article.
+You can use the webSearch tool to search the web for information.
+finally, you will need to write the article based on the topic and outline.
+`;
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiYXJ0aWNsZV9zcGVjLmpzIiwic291cmNlUm9vdCI6IiIsInNvdXJjZXMiOlsiLi4vLi4vLi4vLi4vc3JjL2FnZW50L3Byb21wdC9hcnRpY2xlX3NwZWMudHMiXSwibmFtZXMiOltdLCJtYXBwaW5ncyI6Ijs7O0FBQWEsUUFBQSxXQUFXLEdBQUM7Ozs7O0NBS3hCLENBQUMiLCJzb3VyY2VzQ29udGVudCI6WyJleHBvcnQgY29uc3QgYXJ0aWNsZVNwZWM9YFxuWW91IGFyZSBhIGhlbHBmdWwgYXNzaXN0YW50IHRoYXQgY2FuIGhlbHAgd2l0aCBhcnRpY2xlIHdyaXRpbmcuXG5Zb3UgYXJlIGdpdmVuIGEgdG9waWMgYW5kIGEgYnJpZWYgb3V0bGluZSBvZiB0aGUgYXJ0aWNsZS5cbllvdSBjYW4gdXNlIHRoZSB3ZWJTZWFyY2ggdG9vbCB0byBzZWFyY2ggdGhlIHdlYiBmb3IgaW5mb3JtYXRpb24uXG5maW5hbGx5LCB5b3Ugd2lsbCBuZWVkIHRvIHdyaXRlIHRoZSBhcnRpY2xlIGJhc2VkIG9uIHRoZSB0b3BpYyBhbmQgb3V0bGluZS5cbmA7Il19

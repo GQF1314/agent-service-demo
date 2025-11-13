@@ -1,0 +1,1 @@
+export const BaseUrl='http://calendar.domus.local:8080/agent/api/v1'

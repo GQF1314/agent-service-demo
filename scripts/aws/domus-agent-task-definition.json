@@ -1,0 +1,73 @@
+{
+  "family": "domus-agent",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "4096",
+  "memory": "8192",
+  "executionRoleArn": "arn:aws:iam::194160272412:role/domus-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::194160272412:role/domus-ecs-task-role",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "containerDefinitions": [
+    {
+      "name": "domus-agent",
+      "image": "194160272412.dkr.ecr.us-east-1.amazonaws.com/domus-agent:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8082,
+          "hostPort": 8082,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "SERVICE_NAME",
+          "value": "agent"
+        },
+        {
+          "name": "PORT",
+          "value": "8082"
+        },
+        {
+          "name": "LOG_LEVEL",
+          "value": "info"
+        },
+        {
+          "name": "ENVIRONMENT",
+          "value": "test"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "PERPLEXITY_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:194160272412:secret:dev/agent_config:PERPLEXITY_API_KEY::"
+        },
+        {
+          "name": "AI_GATEWAY_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:194160272412:secret:dev/agent_config:AI_GATEWAY_API_KEY::"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/domus",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "agent"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "STATUS=$(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8082/healthz); if [ \"$STATUS\" -ge 200 ] && [ \"$STATUS\" -lt 300 ]; then echo \"Health check passed with status: $STATUS\"; exit 0; else echo \"Health check failed with status: $STATUS\"; exit 1; fi"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ]
+}

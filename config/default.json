@@ -1,0 +1,18 @@
+{
+    "service": {
+        "baseUrl": "https://smart-domi.app/api/v1",
+        "token": "eyJhbGciOiJIUzI1NiIsImtpZCI6Ikd2VE5GamxSVlJBdTRUanAiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2xxY3l2YWlpcmJ3YnpudnN2bHd1LnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiIyNWJlYWRhMC0zZmIwLTQ0ZjctYmMzNy02M2I2N2E2MzM2OTUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzYzMjk1NzkyLCJpYXQiOjoxNzYyOTM1NzkyLCJlbWFpbCI6ImdvbmdxaW5nZmVpODhAZ21haWwuY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCIsImdvb2dsZSJdfSwidXNlcl9tZXRhZGF0YSI6eyJhdmF0YXJfdXJsIjoiaHR0cHM6Ly9saDMuZ29vZ2xldXNlcmNvbnRlbnQuY29tL2EvQUNnOG9jSTN5amVjRXhOVVJXTG94ZjNvaGZoQWZJdWtJQ0djelFLRWtsM1lYNEstUmNaLUNRPXM5Ni1jIiwiZW1haWwiOiJnb25ncWluZ2ZlaTg4QGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmdWxsX25hbWUiOiJxaW5nZmVpIGdvbmciLCJpc3MiOiJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20iLCJuYW1lIjoicWluZ2ZlaSBnb25nIiwicGhvbmVfdmVyaWZpZWQiOmZhbHNlLCJwaWN0dXJlIjoiaHR0cHM6Ly9saDMuZ29vZ2xldXNlcmNvbnRlbnQuY29tL2EvQUNnOG9jSTN5amVjRXhOVVJXTG94ZjNvaGZoQWZJdWtJQ0djelFLRWtsM1lYNEstUmNaLUNRPXM5Ni1jIiwicHJvdmlkZXJfaWQiOiIxMDU3MTMwNDc4MTI0OTM3MjcwNjkiLCJzdWIiOiIxMDU3MTMwNDc4MTI0OTM3MjcwNjkifSwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJhYWwiOiJhYWwxIiwiYW1yIjpbeyJtZXRob2QiOiJwYXNzd29yZCIsInRpbWVzdGFtcCI6MTc2MjkzNTc5Mn1dLCJzZXNzaW9uX2lkIjoiZDkxZGU1MzAtMzljZi00NzEwLTgwOWItY2Q5M2Y2MzkyNmE1IiwiaXNfYW5vbnltb3VzIjpmYWxzZX0.pi7Di79jFmqHucI_ahwfVAQARaa-_t58TYyS9qLM1cM",
+        "useMock": false
+    },
+    "agent": {
+        "port": 8082
+    },
+    "secret": {
+        "PERPLEXITY_API_KEY": "",
+        "LLM_FAST_MODEL": "google/gemini-2.5-flash",
+        "LLM_MODEL": "anthropic/claude-sonnet-4.5",
+        "LLM_MINI_MODEL": "google/gemini-2.5-flash-lite",
+        "AI_GATEWAY_API_KEY": "",
+        "JINA_API_KEY": ""
+    }
+}

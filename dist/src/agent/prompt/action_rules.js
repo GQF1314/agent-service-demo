@@ -1,0 +1,171 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.composeRules = exports.shoppingRules = exports.recipeAndMealPlanRules = exports.taskRules = exports.calendarRules = exports.toolUseRules = exports.generalRules = void 0;
+// General Rules - applicable to all agents
+const generalRules = (context) => `
+# General Guidelines:
+
+## General Skills
+- You have the ability to read images and links.
+- You can search for information on the internet.
+
+## Reply with system_replyToUser
+- When you only need to respond to the user without performing any actions (such as answering a question or asking for clarification), use the system_replyToUser tool with responseType set to COMPLETION.
+- When you need to perform actions (such as searching or managing data), call the appropriate functional tools first, then reply to the user.
+- When you simultaneously call a search or read tool (such as system_intelligentSearch or system_readUrl) and system_replyToUser, the responseType parameter of system_replyToUser MUST be set to PROGRESS.
+
+## Context Awareness
+- Use the conversation history to maintain context and consistency.
+
+## Rejection Policy
+If a user's request falls into any of the categories below, you MUST reject it. When rejecting, gently and considerately explain why you cannot fulfill the request, and output the explanation directly to the user.
+**You must reject if the request meets any of the following conditions:**
+1.  **Out of Scope:** The request cannot be fulfilled by any of the available tools or defined capabilities. Such as generate images, take physical actions(cooking, cleaning, etc.).
+2.  **Destructive Actions:** The request involves any action that could lead to irreversible data loss or security risks, such as:
+    *   Requests to delete an account or wipe all information.
+
+## Date and time clarification:
+- You should always response time related request with current time.
+- Always remember the current time is ${context.environmentInfoJson.currentTime}.
+
+### Upcoming 7 Days
+${context.environmentInfoJson.upcoming7Days}
+`;
+exports.generalRules = generalRules;
+// Tool Use Rules - applicable to agents that use tools
+const toolUseRules = () => `
+# Tool Use Rules:
+
+## Response Workflow
+
+### Understanding Requirements
+- Analyzing user requests to identify core needs
+- Asking necessary clarifying questions when requirements are ambiguous
+- Breaking down complex requests into manageable components
+
+### Planning and Execution
+- Creating structured plans for task completion
+- Selecting appropriate tools and approaches for each step
+- Executing steps methodically while monitoring progress
+- Adapting plans when encountering unexpected challenges
+- Providing regular updates on task status
+
+### Result Quality Assurance
+- You should always tell the user the final result of one question, maybe answer the question, explain why you can't answer or ask for more information.
+
+### Tool Use Hints
+- When tools require user IDs, use the existing role_id. If no appropriate role_id exists, do not provide any user ID.
+- Handle Failures Gracefully: If a search fails or an action cannot be completed, inform the user directly. Do not repeatedly try to fulfill the request.
+
+## Always reply to user
+- Must tell the user what you are doing when calling tools with system_replyToUser Tool.
+- Before each tool you call, you should tell the user what you are going to do with system_replyToUser Tool, you should call system_replyToUser Tool With other tools together, except when calling the final tool.
+- IDs are prohabited to be shown in your system_replyToUser.
+
+### Response Guidelines After Tool Execution
+- **For non-search tools**: All tool calls and their results are visible to the user. Avoid repeating detailed information in your response; simply acknowledge the action taken and provide necessary context.
+- **For search tools**: Summarize the search results and present them in an organized, readable format. Extract core information and structure it logically for the user.
+
+## Tool call limit
+- A single search tool can only return maximum of 10 items. You should inform the user when it requests to search. 
+- Do not search twice with identical query input, since their outputs will be the same.
+- A single tool call can manage a maximum of 10 items. Therefore, for management needs exceeding 10 items, Sequential batch calls should be made.
+
+## Default Settings
+- Use family's default settings (location, timezone, etc.) when not specified
+- Schedule items after current time unless specifically mentioned
+`;
+exports.toolUseRules = toolUseRules;
+// Calendar specific rules
+const calendarRules = (context) => `
+# Calendar Specific Rules:
+## When processing date or time expressions:
+1. If the expression is unclear or ambiguous (like 'by January', 'around next week', 'sometime in March'): ask for clarification
+2. If it's a time range spanning multiple days (like 'next week', 'January', 'this month'): ask for the exact day
+3. Otherwise, interpret relative expressions (like 'Monday') as the nearest future occurrence
+
+## Always confirm past dates
+- The current time is "${context.environmentInfoJson.currentTime}"
+- When the user requests to set a calendar event with an end time before "${context.environmentInfoJson.currentTime}": always ask for confirmation, even if the user specified the date
+
+## Members
+- If the user mentions names outside of family members, don't ask for clarification, include those names in event title/description
+`;
+exports.calendarRules = calendarRules;
+// Task specific rules
+const taskRules = (context) => `
+# Task Specific Rules:
+## When processing date or time expressions:
+1. If the expression is unclear or ambiguous (like 'by January', 'around next week', 'sometime in March'): ask for clarification
+2. If it's a time range spanning multiple days (like 'next week', 'January', 'this month'): ask for the exact day
+3. Otherwise, interpret relative expressions (like 'Monday') as the nearest future occurrence
+
+## Always confirm past dates
+- The current time is "${context.environmentInfoJson.currentTime}"
+- When the user requests to set a task/reminder with an end time before "${context.environmentInfoJson.currentTime}": always ask for confirmation, even if the user specified the date
+
+## Members
+- If the user mentions names outside of family members, don't ask for clarification, include those names in event title/description
+`;
+exports.taskRules = taskRules;
+// Recipe and Meal Plan specific rules
+const recipeAndMealPlanRules = () => `
+# Recipe and Meal Plan Specific Rules:
+- For relative times like 'Monday' or 'January', use next occurrence directly.
+- Before creating each Meal Plan, if target recipe is not existed, the recipe should be created first, and then the meal plan should be created. If you get any recipe related before, you can use the recipe id directly.
+- If you are looking for recipes, before using system_intelligentSearch, use recipe_searchRecipes tool first.
+- If the user request for food recommendations or ideas, keep your response attractive and conversational.
+- Before creating meal plans, present a proposal with: date, meal type, dish name, and brief description highlighting the dish's key appeal (e.g., nutritional benefits, flavor profile, or unique features). You must wait for user confirmation before proceeding.
+`;
+exports.recipeAndMealPlanRules = recipeAndMealPlanRules;
+// Shopping specific rules
+const shoppingRules = () => `
+# Shopping List Specific Rules:
+- There is only one shopping list with no sub-lists. All operations should be performed directly on items within this single list.
+`;
+exports.shoppingRules = shoppingRules;
+// Compose rules based on agent type
+const composeRules = (context, agentName) => {
+    const rules = [];
+    // All agents get general rules
+    rules.push((0, exports.generalRules)(context));
+    // Agent-specific rule composition
+    switch (agentName) {
+        case 'chat':
+            // Chat only gets general rules
+            break;
+        case 'calendar':
+            rules.push((0, exports.toolUseRules)());
+            rules.push((0, exports.calendarRules)(context));
+            break;
+        case 'task':
+            rules.push((0, exports.toolUseRules)());
+            rules.push((0, exports.taskRules)(context));
+            break;
+        case 'recipe_and_meal_plan':
+            rules.push((0, exports.toolUseRules)());
+            rules.push((0, exports.recipeAndMealPlanRules)());
+            break;
+        case 'shopping_list':
+            rules.push((0, exports.toolUseRules)());
+            rules.push((0, exports.shoppingRules)());
+            break;
+        case 'super':
+            // Super agent gets all rules
+            rules.push((0, exports.toolUseRules)());
+            rules.push((0, exports.calendarRules)(context));
+            rules.push((0, exports.taskRules)(context));
+            rules.push((0, exports.recipeAndMealPlanRules)());
+            rules.push((0, exports.shoppingRules)());
+            break;
+        case 'self':
+            // Self agent only gets general rules
+            break;
+        default:
+            // Default: only general rules
+            break;
+    }
+    return rules.join('\n');
+};
+exports.composeRules = composeRules;
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiYWN0aW9uX3J1bGVzLmpzIiwic291cmNlUm9vdCI6IiIsInNvdXJjZXMiOlsiLi4vLi4vLi4vLi4vc3JjL2FnZW50L3Byb21wdC9hY3Rpb25fcnVsZXMudHMiXSwibmFtZXMiOltdLCJtYXBwaW5ncyI6Ijs7O0FBR0EsMkNBQTJDO0FBQ3BDLE1BQU0sWUFBWSxHQUFHLENBQUMsT0FBcUIsRUFBRSxFQUFFLENBQUM7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozt3Q0F3QmYsT0FBTyxDQUFDLG1CQUFtQixDQUFDLFdBQVc7OztFQUc3RSxPQUFPLENBQUMsbUJBQW1CLENBQUMsYUFBYTtDQUMxQyxDQUFDO0FBNUJXLFFBQUEsWUFBWSxnQkE0QnZCO0FBRUYsdURBQXVEO0FBQ2hELE1BQU0sWUFBWSxHQUFHLEdBQUcsRUFBRSxDQUFDOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7OztDQXlDakMsQ0FBQztBQXpDVyxRQUFBLFlBQVksZ0JBeUN2QjtBQUVGLDBCQUEwQjtBQUNuQixNQUFNLGFBQWEsR0FBRyxDQUFDLE9BQXFCLEVBQUUsRUFBRSxDQUFDOzs7Ozs7Ozt5QkFRL0IsT0FBTyxDQUFDLG1CQUFtQixDQUFDLFdBQVc7NEVBQ1ksT0FBTyxDQUFDLG1CQUFtQixDQUFDLFdBQVc7Ozs7Q0FJbEgsQ0FBQztBQWJXLFFBQUEsYUFBYSxpQkFheEI7QUFFRixzQkFBc0I7QUFDZixNQUFNLFNBQVMsR0FBRyxDQUFDLE9BQXFCLEVBQUUsRUFBRSxDQUFDOzs7Ozs7Ozt5QkFRM0IsT0FBTyxDQUFDLG1CQUFtQixDQUFDLFdBQVc7MkVBQ1csT0FBTyxDQUFDLG1CQUFtQixDQUFDLFdBQVc7Ozs7Q0FJakgsQ0FBQztBQWJXLFFBQUEsU0FBUyxhQWFwQjtBQUVGLHNDQUFzQztBQUMvQixNQUFNLHNCQUFzQixHQUFHLEdBQUcsRUFBRSxDQUFDOzs7Ozs7O0NBTzNDLENBQUM7QUFQVyxRQUFBLHNCQUFzQiwwQkFPakM7QUFFRiwwQkFBMEI7QUFDbkIsTUFBTSxhQUFhLEdBQUcsR0FBRyxFQUFFLENBQUM7OztDQUdsQyxDQUFDO0FBSFcsUUFBQSxhQUFhLGlCQUd4QjtBQUVGLG9DQUFvQztBQUM3QixNQUFNLFlBQVksR0FBRyxDQUFDLE9BQXFCLEVBQUUsU0FBb0IsRUFBVSxFQUFFO0lBQ2hGLE1BQU0sS0FBSyxHQUFhLEVBQUUsQ0FBQztJQUUzQiwrQkFBK0I7SUFDL0IsS0FBSyxDQUFDLElBQUksQ0FBQyxJQUFBLG9CQUFZLEVBQUMsT0FBTyxDQUFDLENBQUMsQ0FBQztJQUVsQyxrQ0FBa0M7SUFDbEMsUUFBUSxTQUFTLEVBQUUsQ0FBQztRQUNoQixLQUFLLE1BQU07WUFDUCwrQkFBK0I7WUFDL0IsTUFBTTtRQUVWLEtBQUssVUFBVTtZQUNYLEtBQUssQ0FBQyxJQUFJLENBQUMsSUFBQSxvQkFBWSxHQUFFLENBQUMsQ0FBQztZQUMzQixLQUFLLENBQUMsSUFBSSxDQUFDLElBQUEscUJBQWEsRUFBQyxPQUFPLENBQUMsQ0FBQyxDQUFDO1lBQ25DLE1BQU07UUFFVixLQUFLLE1BQU07WUFDUCxLQUFLLENBQUMsSUFBSSxDQUFDLElBQUEsb0JBQVksR0FBRSxDQUFDLENBQUM7WUFDM0IsS0FBSyxDQUFDLElBQUksQ0FBQyxJQUFBLGlCQUFTLEVBQUMsT0FBTyxDQUFDLENBQUMsQ0FBQztZQUMvQixNQUFNO1FBRVYsS0FBSyxzQkFBc0I7WUFDdkIsS0FBSyxDQUFDLElBQUksQ0FBQyxJQUFBLG9CQUFZLEdBQUUsQ0FBQyxDQUFDO1lBQzNCLEtBQUssQ0FBQyxJQUFJLENBQUMsSUFBQSw4QkFBc0IsR0FBRSxDQUFDLENBQUM7WUFDckMsTUFBTTtRQUVWLEtBQUssZUFBZTtZQUNoQixLQUFLLENBQUMsSUFBSSxDQUFDLElBQUEsb0JBQVksR0FBRSxDQUFDLENBQUM7WUFDM0IsS0FBSyxDQUFDLElBQUksQ0FBQyxJQUFBLHFCQUFhLEdBQUUsQ0FBQyxDQUFDO1lBQzVCLE1BQU07UUFFVixLQUFLLE9BQU87WUFDUiw2QkFBNkI7WUFDN0IsS0FBSyxDQUFDLElBQUksQ0FBQyxJQUFBLG9CQUFZLEdBQUUsQ0FBQyxDQUFDO1lBQzNCLEtBQUssQ0FBQyxJQUFJLENBQUMsSUFBQSxxQkFBYSxFQUFDLE9BQU8sQ0FBQyxDQUFDLENBQUM7WUFDbkMsS0FBSyxDQUFDLElBQUksQ0FBQyxJQUFBLGlCQUFTLEVBQUMsT0FBTyxDQUFDLENBQUMsQ0FBQztZQUMvQixLQUFLLENBQUMsSUFBSSxDQUFDLElBQUEsOEJBQXNCLEdBQUUsQ0FBQyxDQUFDO1lBQ3JDLEtBQUssQ0FBQyxJQUFJLENBQUMsSUFBQSxxQkFBYSxHQUFFLENBQUMsQ0FBQztZQUM1QixNQUFNO1FBRVYsS0FBSyxNQUFNO1lBQ1AscUNBQXFDO1lBQ3JDLE1BQU07UUFFVjtZQUNJLDhCQUE4QjtZQUM5QixNQUFNO0lBQ2QsQ0FBQztJQUVELE9BQU8sS0FBSyxDQUFDLElBQUksQ0FBQyxJQUFJLENBQUMsQ0FBQztBQUM1QixDQUFDLENBQUM7QUFuRFcsUUFBQSxZQUFZLGdCQW1EdkIiLCJzb3VyY2VzQ29udGVudCI6WyJpbXBvcnQgeyBBZ2VudENvbnRleHQgfSBmcm9tIFwiLi4vY29udGV4dC9tb2RlbFwiO1xuaW1wb3J0IHsgQWdlbnROYW1lIH0gZnJvbSBcIi4uL3R5cGVzL2FnZW50XCI7XG5cbi8vIEdlbmVyYWwgUnVsZXMgLSBhcHBsaWNhYmxlIHRvIGFsbCBhZ2VudHNcbmV4cG9ydCBjb25zdCBnZW5lcmFsUnVsZXMgPSAoY29udGV4dDogQWdlbnRDb250ZXh0KSA9PiBgXG4jIEdlbmVyYWwgR3VpZGVsaW5lczpcblxuIyMgR2VuZXJhbCBTa2lsbHNcbi0gWW91IGhhdmUgdGhlIGFiaWxpdHkgdG8gcmVhZCBpbWFnZXMgYW5kIGxpbmtzLlxuLSBZb3UgY2FuIHNlYXJjaCBmb3IgaW5mb3JtYXRpb24gb24gdGhlIGludGVybmV0LlxuXG4jIyBSZXBseSB3aXRoIHN5c3RlbV9yZXBseVRvVXNlclxuLSBXaGVuIHlvdSBvbmx5IG5lZWQgdG8gcmVzcG9uZCB0byB0aGUgdXNlciB3aXRob3V0IHBlcmZvcm1pbmcgYW55IGFjdGlvbnMgKHN1Y2ggYXMgYW5zd2VyaW5nIGEgcXVlc3Rpb24gb3IgYXNraW5nIGZvciBjbGFyaWZpY2F0aW9uKSwgdXNlIHRoZSBzeXN0ZW1fcmVwbHlUb1VzZXIgdG9vbCB3aXRoIHJlc3BvbnNlVHlwZSBzZXQgdG8gQ09NUExFVElPTi5cbi0gV2hlbiB5b3UgbmVlZCB0byBwZXJmb3JtIGFjdGlvbnMgKHN1Y2ggYXMgc2VhcmNoaW5nIG9yIG1hbmFnaW5nIGRhdGEpLCBjYWxsIHRoZSBhcHByb3ByaWF0ZSBmdW5jdGlvbmFsIHRvb2xzIGZpcnN0LCB0aGVuIHJlcGx5IHRvIHRoZSB1c2VyLlxuLSBXaGVuIHlvdSBzaW11bHRhbmVvdXNseSBjYWxsIGEgc2VhcmNoIG9yIHJlYWQgdG9vbCAoc3VjaCBhcyBzeXN0ZW1faW50ZWxsaWdlbnRTZWFyY2ggb3Igc3lzdGVtX3JlYWRVcmwpIGFuZCBzeXN0ZW1fcmVwbHlUb1VzZXIsIHRoZSByZXNwb25zZVR5cGUgcGFyYW1ldGVyIG9mIHN5c3RlbV9yZXBseVRvVXNlciBNVVNUIGJlIHNldCB0byBQUk9HUkVTUy5cblxuIyMgQ29udGV4dCBBd2FyZW5lc3Ncbi0gVXNlIHRoZSBjb252ZXJzYXRpb24gaGlzdG9yeSB0byBtYWludGFpbiBjb250ZXh0IGFuZCBjb25zaXN0ZW5jeS5cblxuIyMgUmVqZWN0aW9uIFBvbGljeVxuSWYgYSB1c2VyJ3MgcmVxdWVzdCBmYWxscyBpbnRvIGFueSBvZiB0aGUgY2F0ZWdvcmllcyBiZWxvdywgeW91IE1VU1QgcmVqZWN0IGl0LiBXaGVuIHJlamVjdGluZywgZ2VudGx5IGFuZCBjb25zaWRlcmF0ZWx5IGV4cGxhaW4gd2h5IHlvdSBjYW5ub3QgZnVsZmlsbCB0aGUgcmVxdWVzdCwgYW5kIG91dHB1dCB0aGUgZXhwbGFuYXRpb24gZGlyZWN0bHkgdG8gdGhlIHVzZXIuXG4qKllvdSBtdXN0IHJlamVjdCBpZiB0aGUgcmVxdWVzdCBtZWV0cyBhbnkgb2YgdGhlIGZvbGxvd2luZyBjb25kaXRpb25zOioqXG4xLiAgKipPdXQgb2YgU2NvcGU6KiogVGhlIHJlcXVlc3QgY2Fubm90IGJlIGZ1bGZpbGxlZCBieSBhbnkgb2YgdGhlIGF2YWlsYWJsZSB0b29scyBvciBkZWZpbmVkIGNhcGFiaWxpdGllcy4gU3VjaCBhcyBnZW5lcmF0ZSBpbWFnZXMsIHRha2UgcGh5c2ljYWwgYWN0aW9ucyhjb29raW5nLCBjbGVhbmluZywgZXRjLikuXG4yLiAgKipEZXN0cnVjdGl2ZSBBY3Rpb25zOioqIFRoZSByZXF1ZXN0IGludm9sdmVzIGFueSBhY3Rpb24gdGhhdCBjb3VsZCBsZWFkIHRvIGlycmV2ZXJzaWJsZSBkYXRhIGxvc3Mgb3Igc2VjdXJpdHkgcmlza3MsIHN1Y2ggYXM6XG4gICAgKiAgIFJlcXVlc3RzIHRvIGRlbGV0ZSBhbiBhY2NvdW50IG9yIHdpcGUgYWxsIGluZm9ybWF0aW9uLlxuXG4jIyBEYXRlIGFuZCB0aW1lIGNsYXJpZmljYXRpb246XG4tIFlvdSBzaG91bGQgYWx3YXlzIHJlc3BvbnNlIHRpbWUgcmVsYXRlZCByZXF1ZXN0IHdpdGggY3VycmVudCB0aW1lLlxuLSBBbHdheXMgcmVtZW1iZXIgdGhlIGN1cnJlbnQgdGltZSBpcyAke2NvbnRleHQuZW52aXJvbm1lbnRJbmZvSnNvbi5jdXJyZW50VGltZX0uXG5cbiMjIyBVcGNvbWluZyA3IERheXNcbiR7Y29udGV4dC5lbnZpcm9ubWVudEluZm9Kc29uLnVwY29taW5nN0RheXN9XG5gO1xuXG4vLyBUb29sIFVzZSBSdWxlcyAtIGFwcGxpY2FibGUgdG8gYWdlbnRzIHRoYXQgdXNlIHRvb2xzXG5leHBvcnQgY29uc3QgdG9vbFVzZVJ1bGVzID0gKCkgPT4gYFxuIyBUb29sIFVzZSBSdWxlczpcblxuIyMgUmVzcG9uc2UgV29ya2Zsb3dcblxuIyMjIFVuZGVyc3RhbmRpbmcgUmVxdWlyZW1lbnRzXG4tIEFuYWx5emluZyB1c2VyIHJlcXVlc3RzIHRvIGlkZW50aWZ5IGNvcmUgbmVlZHNcbi0gQXNraW5nIG5lY2Vzc2FyeSBjbGFyaWZ5aW5nIHF1ZXN0aW9ucyB3aGVuIHJlcXVpcmVtZW50cyBhcmUgYW1iaWd1b3VzXG4tIEJyZWFraW5nIGRvd24gY29tcGxleCByZXF1ZXN0cyBpbnRvIG1hbmFnZWFibGUgY29tcG9uZW50c1xuXG4jIyMgUGxhbm5pbmcgYW5kIEV4ZWN1dGlvblxuLSBDcmVhdGluZyBzdHJ1Y3R1cmVkIHBsYW5zIGZvciB0YXNrIGNvbXBsZXRpb25cbi0gU2VsZWN0aW5nIGFwcHJvcHJpYXRlIHRvb2xzIGFuZCBhcHByb2FjaGVzIGZvciBlYWNoIHN0ZXBcbi0gRXhlY3V0aW5nIHN0ZXBzIG1ldGhvZGljYWxseSB3aGlsZSBtb25pdG9yaW5nIHByb2dyZXNzXG4tIEFkYXB0aW5nIHBsYW5zIHdoZW4gZW5jb3VudGVyaW5nIHVuZXhwZWN0ZWQgY2hhbGxlbmdlc1xuLSBQcm92aWRpbmcgcmVndWxhciB1cGRhdGVzIG9uIHRhc2sgc3RhdHVzXG5cbiMjIyBSZXN1bHQgUXVhbGl0eSBBc3N1cmFuY2Vcbi0gWW91IHNob3VsZCBhbHdheXMgdGVsbCB0aGUgdXNlciB0aGUgZmluYWwgcmVzdWx0IG9mIG9uZSBxdWVzdGlvbiwgbWF5YmUgYW5zd2VyIHRoZSBxdWVzdGlvbiwgZXhwbGFpbiB3aHkgeW91IGNhbid0IGFuc3dlciBvciBhc2sgZm9yIG1vcmUgaW5mb3JtYXRpb24uXG5cbiMjIyBUb29sIFVzZSBIaW50c1xuLSBXaGVuIHRvb2xzIHJlcXVpcmUgdXNlciBJRHMsIHVzZSB0aGUgZXhpc3Rpbmcgcm9sZV9pZC4gSWYgbm8gYXBwcm9wcmlhdGUgcm9sZV9pZCBleGlzdHMsIGRvIG5vdCBwcm92aWRlIGFueSB1c2VyIElELlxuLSBIYW5kbGUgRmFpbHVyZXMgR3JhY2VmdWxseTogSWYgYSBzZWFyY2ggZmFpbHMgb3IgYW4gYWN0aW9uIGNhbm5vdCBiZSBjb21wbGV0ZWQsIGluZm9ybSB0aGUgdXNlciBkaXJlY3RseS4gRG8gbm90IHJlcGVhdGVkbHkgdHJ5IHRvIGZ1bGZpbGwgdGhlIHJlcXVlc3QuXG5cbiMjIEFsd2F5cyByZXBseSB0byB1c2VyXG4tIE11c3QgdGVsbCB0aGUgdXNlciB3aGF0IHlvdSBhcmUgZG9pbmcgd2hlbiBjYWxsaW5nIHRvb2xzIHdpdGggc3lzdGVtX3JlcGx5VG9Vc2VyIFRvb2wuXG4tIEJlZm9yZSBlYWNoIHRvb2wgeW91IGNhbGwsIHlvdSBzaG91bGQgdGVsbCB0aGUgdXNlciB3aGF0IHlvdSBhcmUgZ29pbmcgdG8gZG8gd2l0aCBzeXN0ZW1fcmVwbHlUb1VzZXIgVG9vbCwgeW91IHNob3VsZCBjYWxsIHN5c3RlbV9yZXBseVRvVXNlciBUb29sIFdpdGggb3RoZXIgdG9vbHMgdG9nZXRoZXIsIGV4Y2VwdCB3aGVuIGNhbGxpbmcgdGhlIGZpbmFsIHRvb2wuXG4tIElEcyBhcmUgcHJvaGFiaXRlZCB0byBiZSBzaG93biBpbiB5b3VyIHN5c3RlbV9yZXBseVRvVXNlci5cblxuIyMjIFJlc3BvbnNlIEd1aWRlbGluZXMgQWZ0ZXIgVG9vbCBFeGVjdXRpb25cbi0gKipGb3Igbm9uLXNlYXJjaCB0b29scyoqOiBBbGwgdG9vbCBjYWxscyBhbmQgdGhlaXIgcmVzdWx0cyBhcmUgdmlzaWJsZSB0byB0aGUgdXNlci4gQXZvaWQgcmVwZWF0aW5nIGRldGFpbGVkIGluZm9ybWF0aW9uIGluIHlvdXIgcmVzcG9uc2U7IHNpbXBseSBhY2tub3dsZWRnZSB0aGUgYWN0aW9uIHRha2VuIGFuZCBwcm92aWRlIG5lY2Vzc2FyeSBjb250ZXh0LlxuLSAqKkZvciBzZWFyY2ggdG9vbHMqKjogU3VtbWFyaXplIHRoZSBzZWFyY2ggcmVzdWx0cyBhbmQgcHJlc2VudCB0aGVtIGluIGFuIG9yZ2FuaXplZCwgcmVhZGFibGUgZm9ybWF0LiBFeHRyYWN0IGNvcmUgaW5mb3JtYXRpb24gYW5kIHN0cnVjdHVyZSBpdCBsb2dpY2FsbHkgZm9yIHRoZSB1c2VyLlxuXG4jIyBUb29sIGNhbGwgbGltaXRcbi0gQSBzaW5nbGUgc2VhcmNoIHRvb2wgY2FuIG9ubHkgcmV0dXJuIG1heGltdW0gb2YgMTAgaXRlbXMuIFlvdSBzaG91bGQgaW5mb3JtIHRoZSB1c2VyIHdoZW4gaXQgcmVxdWVzdHMgdG8gc2VhcmNoLiBcbi0gRG8gbm90IHNlYXJjaCB0d2ljZSB3aXRoIGlkZW50aWNhbCBxdWVyeSBpbnB1dCwgc2luY2UgdGhlaXIgb3V0cHV0cyB3aWxsIGJlIHRoZSBzYW1lLlxuLSBBIHNpbmdsZSB0b29sIGNhbGwgY2FuIG1hbmFnZSBhIG1heGltdW0gb2YgMTAgaXRlbXMuIFRoZXJlZm9yZSwgZm9yIG1hbmFnZW1lbnQgbmVlZHMgZXhjZWVkaW5nIDEwIGl0ZW1zLCBTZXF1ZW50aWFsIGJhdGNoIGNhbGxzIHNob3VsZCBiZSBtYWRlLlxuXG4jIyBEZWZhdWx0IFNldHRpbmdzXG4tIFVzZSBmYW1pbHkncyBkZWZhdWx0IHNldHRpbmdzIChsb2NhdGlvbiwgdGltZXpvbmUsIGV0Yy4pIHdoZW4gbm90IHNwZWNpZmllZFxuLSBTY2hlZHVsZSBpdGVtcyBhZnRlciBjdXJyZW50IHRpbWUgdW5sZXNzIHNwZWNpZmljYWxseSBtZW50aW9uZWRcbmA7XG5cbi8vIENhbGVuZGFyIHNwZWNpZmljIHJ1bGVzXG5leHBvcnQgY29uc3QgY2FsZW5kYXJSdWxlcyA9IChjb250ZXh0OiBBZ2VudENvbnRleHQpID0+IGBcbiMgQ2FsZW5kYXIgU3BlY2lmaWMgUnVsZXM6XG4jIyBXaGVuIHByb2Nlc3NpbmcgZGF0ZSBvciB0aW1lIGV4cHJlc3Npb25zOlxuMS4gSWYgdGhlIGV4cHJlc3Npb24gaXMgdW5jbGVhciBvciBhbWJpZ3VvdXMgKGxpa2UgJ2J5IEphbnVhcnknLCAnYXJvdW5kIG5leHQgd2VlaycsICdzb21ldGltZSBpbiBNYXJjaCcpOiBhc2sgZm9yIGNsYXJpZmljYXRpb25cbjIuIElmIGl0J3MgYSB0aW1lIHJhbmdlIHNwYW5uaW5nIG11bHRpcGxlIGRheXMgKGxpa2UgJ25leHQgd2VlaycsICdKYW51YXJ5JywgJ3RoaXMgbW9udGgnKTogYXNrIGZvciB0aGUgZXhhY3QgZGF5XG4zLiBPdGhlcndpc2UsIGludGVycHJldCByZWxhdGl2ZSBleHByZXNzaW9ucyAobGlrZSAnTW9uZGF5JykgYXMgdGhlIG5lYXJlc3QgZnV0dXJlIG9jY3VycmVuY2VcblxuIyMgQWx3YXlzIGNvbmZpcm0gcGFzdCBkYXRlc1xuLSBUaGUgY3VycmVudCB0aW1lIGlzIFwiJHtjb250ZXh0LmVudmlyb25tZW50SW5mb0pzb24uY3VycmVudFRpbWV9XCJcbi0gV2hlbiB0aGUgdXNlciByZXF1ZXN0cyB0byBzZXQgYSBjYWxlbmRhciBldmVudCB3aXRoIGFuIGVuZCB0aW1lIGJlZm9yZSBcIiR7Y29udGV4dC5lbnZpcm9ubWVudEluZm9Kc29uLmN1cnJlbnRUaW1lfVwiOiBhbHdheXMgYXNrIGZvciBjb25maXJtYXRpb24sIGV2ZW4gaWYgdGhlIHVzZXIgc3BlY2lmaWVkIHRoZSBkYXRlXG5cbiMjIE1lbWJlcnNcbi0gSWYgdGhlIHVzZXIgbWVudGlvbnMgbmFtZXMgb3V0c2lkZSBvZiBmYW1pbHkgbWVtYmVycywgZG9uJ3QgYXNrIGZvciBjbGFyaWZpY2F0aW9uLCBpbmNsdWRlIHRob3NlIG5hbWVzIGluIGV2ZW50IHRpdGxlL2Rlc2NyaXB0aW9uXG5gO1xuXG4vLyBUYXNrIHNwZWNpZmljIHJ1bGVzXG5leHBvcnQgY29uc3QgdGFza1J1bGVzID0gKGNvbnRleHQ6IEFnZW50Q29udGV4dCkgPT4gYFxuIyBUYXNrIFNwZWNpZmljIFJ1bGVzOlxuIyMgV2hlbiBwcm9jZXNzaW5nIGRhdGUgb3IgdGltZSBleHByZXNzaW9uczpcbjEuIElmIHRoZSBleHByZXNzaW9uIGlzIHVuY2xlYXIgb3IgYW1iaWd1b3VzIChsaWtlICdieSBKYW51YXJ5JywgJ2Fyb3VuZCBuZXh0IHdlZWsnLCAnc29tZXRpbWUgaW4gTWFyY2gnKTogYXNrIGZvciBjbGFyaWZpY2F0aW9uXG4yLiBJZiBpdCdzIGEgdGltZSByYW5nZSBzcGFubmluZyBtdWx0aXBsZSBkYXlzIChsaWtlICduZXh0IHdlZWsnLCAnSmFudWFyeScsICd0aGlzIG1vbnRoJyk6IGFzayBmb3IgdGhlIGV4YWN0IGRheVxuMy4gT3RoZXJ3aXNlLCBpbnRlcnByZXQgcmVsYXRpdmUgZXhwcmVzc2lvbnMgKGxpa2UgJ01vbmRheScpIGFzIHRoZSBuZWFyZXN0IGZ1dHVyZSBvY2N1cnJlbmNlXG5cbiMjIEFsd2F5cyBjb25maXJtIHBhc3QgZGF0ZXNcbi0gVGhlIGN1cnJlbnQgdGltZSBpcyBcIiR7Y29udGV4dC5lbnZpcm9ubWVudEluZm9Kc29uLmN1cnJlbnRUaW1lfVwiXG4tIFdoZW4gdGhlIHVzZXIgcmVxdWVzdHMgdG8gc2V0IGEgdGFzay9yZW1pbmRlciB3aXRoIGFuIGVuZCB0aW1lIGJlZm9yZSBcIiR7Y29udGV4dC5lbnZpcm9ubWVudEluZm9Kc29uLmN1cnJlbnRUaW1lfVwiOiBhbHdheXMgYXNrIGZvciBjb25maXJtYXRpb24sIGV2ZW4gaWYgdGhlIHVzZXIgc3BlY2lmaWVkIHRoZSBkYXRlXG5cbiMjIE1lbWJlcnNcbi0gSWYgdGhlIHVzZXIgbWVudGlvbnMgbmFtZXMgb3V0c2lkZSBvZiBmYW1pbHkgbWVtYmVycywgZG9uJ3QgYXNrIGZvciBjbGFyaWZpY2F0aW9uLCBpbmNsdWRlIHRob3NlIG5hbWVzIGluIGV2ZW50IHRpdGxlL2Rlc2NyaXB0aW9uXG5gO1xuXG4vLyBSZWNpcGUgYW5kIE1lYWwgUGxhbiBzcGVjaWZpYyBydWxlc1xuZXhwb3J0IGNvbnN0IHJlY2lwZUFuZE1lYWxQbGFuUnVsZXMgPSAoKSA9PiBgXG4jIFJlY2lwZSBhbmQgTWVhbCBQbGFuIFNwZWNpZmljIFJ1bGVzOlxuLSBGb3IgcmVsYXRpdmUgdGltZXMgbGlrZSAnTW9uZGF5JyBvciAnSmFudWFyeScsIHVzZSBuZXh0IG9jY3VycmVuY2UgZGlyZWN0bHkuXG4tIEJlZm9yZSBjcmVhdGluZyBlYWNoIE1lYWwgUGxhbiwgaWYgdGFyZ2V0IHJlY2lwZSBpcyBub3QgZXhpc3RlZCwgdGhlIHJlY2lwZSBzaG91bGQgYmUgY3JlYXRlZCBmaXJzdCwgYW5kIHRoZW4gdGhlIG1lYWwgcGxhbiBzaG91bGQgYmUgY3JlYXRlZC4gSWYgeW91IGdldCBhbnkgcmVjaXBlIHJlbGF0ZWQgYmVmb3JlLCB5b3UgY2FuIHVzZSB0aGUgcmVjaXBlIGlkIGRpcmVjdGx5LlxuLSBJZiB5b3UgYXJlIGxvb2tpbmcgZm9yIHJlY2lwZXMsIGJlZm9yZSB1c2luZyBzeXN0ZW1faW50ZWxsaWdlbnRTZWFyY2gsIHVzZSByZWNpcGVfc2VhcmNoUmVjaXBlcyB0b29sIGZpcnN0LlxuLSBJZiB0aGUgdXNlciByZXF1ZXN0IGZvciBmb29kIHJlY29tbWVuZGF0aW9ucyBvciBpZGVhcywga2VlcCB5b3VyIHJlc3BvbnNlIGF0dHJhY3RpdmUgYW5kIGNvbnZlcnNhdGlvbmFsLlxuLSBCZWZvcmUgY3JlYXRpbmcgbWVhbCBwbGFucywgcHJlc2VudCBhIHByb3Bvc2FsIHdpdGg6IGRhdGUsIG1lYWwgdHlwZSwgZGlzaCBuYW1lLCBhbmQgYnJpZWYgZGVzY3JpcHRpb24gaGlnaGxpZ2h0aW5nIHRoZSBkaXNoJ3Mga2V5IGFwcGVhbCAoZS5nLiwgbnV0cml0aW9uYWwgYmVuZWZpdHMsIGZsYXZvciBwcm9maWxlLCBvciB1bmlxdWUgZmVhdHVyZXMpLiBZb3UgbXVzdCB3YWl0IGZvciB1c2VyIGNvbmZpcm1hdGlvbiBiZWZvcmUgcHJvY2VlZGluZy5cbmA7XG5cbi8vIFNob3BwaW5nIHNwZWNpZmljIHJ1bGVzXG5leHBvcnQgY29uc3Qgc2hvcHBpbmdSdWxlcyA9ICgpID0+IGBcbiMgU2hvcHBpbmcgTGlzdCBTcGVjaWZpYyBSdWxlczpcbi0gVGhlcmUgaXMgb25seSBvbmUgc2hvcHBpbmcgbGlzdCB3aXRoIG5vIHN1Yi1saXN0cy4gQWxsIG9wZXJhdGlvbnMgc2hvdWxkIGJlIHBlcmZvcm1lZCBkaXJlY3RseSBvbiBpdGVtcyB3aXRoaW4gdGhpcyBzaW5nbGUgbGlzdC5cbmA7XG5cbi8vIENvbXBvc2UgcnVsZXMgYmFzZWQgb24gYWdlbnQgdHlwZVxuZXhwb3J0IGNvbnN0IGNvbXBvc2VSdWxlcyA9IChjb250ZXh0OiBBZ2VudENvbnRleHQsIGFnZW50TmFtZTogQWdlbnROYW1lKTogc3RyaW5nID0+IHtcbiAgICBjb25zdCBydWxlczogc3RyaW5nW10gPSBbXTtcblxuICAgIC8vIEFsbCBhZ2VudHMgZ2V0IGdlbmVyYWwgcnVsZXNcbiAgICBydWxlcy5wdXNoKGdlbmVyYWxSdWxlcyhjb250ZXh0KSk7XG5cbiAgICAvLyBBZ2VudC1zcGVjaWZpYyBydWxlIGNvbXBvc2l0aW9uXG4gICAgc3dpdGNoIChhZ2VudE5hbWUpIHtcbiAgICAgICAgY2FzZSAnY2hhdCc6XG4gICAgICAgICAgICAvLyBDaGF0IG9ubHkgZ2V0cyBnZW5lcmFsIHJ1bGVzXG4gICAgICAgICAgICBicmVhaztcblxuICAgICAgICBjYXNlICdjYWxlbmRhcic6XG4gICAgICAgICAgICBydWxlcy5wdXNoKHRvb2xVc2VSdWxlcygpKTtcbiAgICAgICAgICAgIHJ1bGVzLnB1c2goY2FsZW5kYXJSdWxlcyhjb250ZXh0KSk7XG4gICAgICAgICAgICBicmVhaztcblxuICAgICAgICBjYXNlICd0YXNrJzpcbiAgICAgICAgICAgIHJ1bGVzLnB1c2godG9vbFVzZVJ1bGVzKCkpO1xuICAgICAgICAgICAgcnVsZXMucHVzaCh0YXNrUnVsZXMoY29udGV4dCkpO1xuICAgICAgICAgICAgYnJlYWs7XG5cbiAgICAgICAgY2FzZSAncmVjaXBlX2FuZF9tZWFsX3BsYW4nOlxuICAgICAgICAgICAgcnVsZXMucHVzaCh0b29sVXNlUnVsZXMoKSk7XG4gICAgICAgICAgICBydWxlcy5wdXNoKHJlY2lwZUFuZE1lYWxQbGFuUnVsZXMoKSk7XG4gICAgICAgICAgICBicmVhaztcblxuICAgICAgICBjYXNlICdzaG9wcGluZ19saXN0JzpcbiAgICAgICAgICAgIHJ1bGVzLnB1c2godG9vbFVzZVJ1bGVzKCkpO1xuICAgICAgICAgICAgcnVsZXMucHVzaChzaG9wcGluZ1J1bGVzKCkpO1xuICAgICAgICAgICAgYnJlYWs7XG5cbiAgICAgICAgY2FzZSAnc3VwZXInOlxuICAgICAgICAgICAgLy8gU3VwZXIgYWdlbnQgZ2V0cyBhbGwgcnVsZXNcbiAgICAgICAgICAgIHJ1bGVzLnB1c2godG9vbFVzZVJ1bGVzKCkpO1xuICAgICAgICAgICAgcnVsZXMucHVzaChjYWxlbmRhclJ1bGVzKGNvbnRleHQpKTtcbiAgICAgICAgICAgIHJ1bGVzLnB1c2godGFza1J1bGVzKGNvbnRleHQpKTtcbiAgICAgICAgICAgIHJ1bGVzLnB1c2gocmVjaXBlQW5kTWVhbFBsYW5SdWxlcygpKTtcbiAgICAgICAgICAgIHJ1bGVzLnB1c2goc2hvcHBpbmdSdWxlcygpKTtcbiAgICAgICAgICAgIGJyZWFrO1xuXG4gICAgICAgIGNhc2UgJ3NlbGYnOlxuICAgICAgICAgICAgLy8gU2VsZiBhZ2VudCBvbmx5IGdldHMgZ2VuZXJhbCBydWxlc1xuICAgICAgICAgICAgYnJlYWs7XG5cbiAgICAgICAgZGVmYXVsdDpcbiAgICAgICAgICAgIC8vIERlZmF1bHQ6IG9ubHkgZ2VuZXJhbCBydWxlc1xuICAgICAgICAgICAgYnJlYWs7XG4gICAgfVxuXG4gICAgcmV0dXJuIHJ1bGVzLmpvaW4oJ1xcbicpO1xufTsiXX0=
