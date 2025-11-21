@@ -2,9 +2,13 @@ import "dotenv/config";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { createNodeWebSocket } from "@hono/node-ws";
+import { SpeechClient, protos as speechProtos } from "@google-cloud/speech";
 import { AgentEntry } from "./entry";
 import { readFileSync } from "fs";
 import { join } from "path";
+import type { Duplex } from "stream";
+import type { WSContext, WSReadyState } from "hono/ws";
 import { AppConfig } from "./index";
 import {
   createSSEErrorResponse,
@@ -62,12 +66,151 @@ try {
   buildInfoFromFile = {};
 }
 const agentConfig = config.get<AppConfig["agent"]>("agent");
+const secretConfig = config.get<AppConfig["secret"]>("secret");
+
+const googleSpeechApiKey =
+  process.env.GOOGLE_SPEECH_API_KEY ?? secretConfig.GOOGLE_SPEECH_API_KEY ?? "";
+
+let cachedSpeechClient: SpeechClient | null = null;
+
+const getSpeechClient = () => {
+  if (!googleSpeechApiKey) {
+    throw new Error("GOOGLE_SPEECH_API_KEY is not configured");
+  }
+  console.log("------googleSpeechApiKey", googleSpeechApiKey);
+
+  if (!cachedSpeechClient) {
+    cachedSpeechClient = new SpeechClient({
+      projectId: secretConfig.asr_google_project_id,
+      credentials: {
+        client_email: secretConfig.asr_google_client_email,
+        private_key: secretConfig.asr_google_private_key,
+      },
+    });
+  }
+
+  return cachedSpeechClient;
+};
+
+const DEFAULT_SPEECH_LANGUAGE = "en-US";
+const DEFAULT_SPEECH_SAMPLE_RATE = 16000;
+const DEFAULT_SPEECH_ENCODING = "LINEAR16";
+const FALSE_LIKE_VALUES = new Set(["false", "0", "no"]);
+
+interface SpeechStreamingConfigOptions {
+  encoding?: string | null;
+  language?: string | null;
+  sampleRate?: string | null;
+  interimResults?: string | null;
+  model?: string | null;
+}
+
+const createSpeechStreamingConfig = (options: SpeechStreamingConfigOptions) => {
+  const encoding = (options.encoding ?? DEFAULT_SPEECH_ENCODING).trim().toUpperCase();
+  const languageCode = options.language?.trim() || DEFAULT_SPEECH_LANGUAGE;
+  const parsedSampleRate = Number.parseInt(options.sampleRate ?? "", 10);
+  const sampleRateHertz =
+    Number.isFinite(parsedSampleRate) && parsedSampleRate > 0
+      ? parsedSampleRate
+      : DEFAULT_SPEECH_SAMPLE_RATE;
+  const interimFlag = options.interimResults?.trim().toLowerCase();
+  const interimResults =
+    interimFlag === undefined || interimFlag === ""
+      ? true
+      : !FALSE_LIKE_VALUES.has(interimFlag);
+
+  const streamingConfig: Record<string, unknown> = {
+    config: {
+      encoding,
+      languageCode,
+      sampleRateHertz,
+      enableAutomaticPunctuation: true,
+    },
+    interimResults,
+  };
+
+  if (options.model) {
+    (streamingConfig.config as Record<string, unknown>).model = options.model;
+  }
+
+  return streamingConfig;
+};
+
+type ControlEvent = "stop" | "ping";
+
+const parseControlEvent = (raw: string): ControlEvent | null => {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const normalized = trimmed.toLowerCase();
+  if (normalized === "stop" || normalized === "end" || normalized === "close") {
+    return "stop";
+  }
+  if (normalized === "ping") {
+    return "ping";
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    const eventValue = parsed?.event ?? parsed?.type;
+    if (typeof eventValue === "string") {
+      const event = eventValue.toLowerCase();
+      if (event === "stop" || event === "end" || event === "close") {
+        return "stop";
+      }
+      if (event === "ping") {
+        return "ping";
+      }
+    }
+  } catch {
+    // Ignore JSON parse errors, treat as binary/base64 payloads.
+  }
+  return null;
+};
+
+const normalizeWsPayload = (
+  payload: unknown,
+): { chunk: Buffer | null; control?: ControlEvent } => {
+  if (payload == null) {
+    return { chunk: null };
+  }
+
+  if (typeof Buffer !== "undefined" && Buffer.isBuffer(payload)) {
+    return { chunk: payload };
+  }
+
+  if (payload instanceof ArrayBuffer) {
+    return { chunk: Buffer.from(payload) };
+  }
+
+  if (ArrayBuffer.isView(payload)) {
+    const view = payload as ArrayBufferView;
+    return {
+      chunk: Buffer.from(view.buffer, view.byteOffset, view.byteLength),
+    };
+  }
+
+  if (typeof payload === "string") {
+    const control = parseControlEvent(payload);
+    if (control) {
+      return { chunk: null, control };
+    }
+    try {
+      return { chunk: Buffer.from(payload, "base64") };
+    } catch {
+      return { chunk: null };
+    }
+  }
+
+  return { chunk: null };
+};
 
 // Create service instance
 const agentEntry = new AgentEntry();
 const app = new Hono<{
   Variables:IServerContext;
 }>();
+const { upgradeWebSocket, injectWebSocket } = createNodeWebSocket({ app });
 // CORS configuration
 app.use("*", cors({
   origin: "http://localhost:3000",
@@ -186,6 +329,193 @@ app.post("/agent/v1/recipe/gen", async (c) => {
     });
   }
 })
+
+app.get("/agent/v1/speech/ws", upgradeWebSocket((c) => {
+  const logger = c.var.logger;
+  const streamingConfig = createSpeechStreamingConfig({
+    encoding: c.req.header("x-audio-encoding") ?? c.req.query("encoding"),
+    language: c.req.header("x-speech-language") ?? c.req.query("language"),
+    sampleRate: c.req.header("x-audio-sample-rate") ?? c.req.query("sampleRate"),
+    interimResults:
+      c.req.header("x-speech-interim-results") ?? c.req.query("interimResults"),
+    model: c.req.header("x-speech-model") ?? c.req.query("model"),
+  });
+
+  const pendingAudio: Buffer[] = [];
+  const WS_OPEN_STATE: WSReadyState = 1;
+  let recognizeStream: Duplex | null = null;
+  let streamReady = false;
+  let wsClosed = false;
+
+  const sendWsMessage = (
+    ws: WSContext,
+    payload: Record<string, unknown>,
+  ) => {
+    if (ws.readyState !== WS_OPEN_STATE) {
+      return;
+    }
+    try {
+      ws.send(JSON.stringify(payload));
+    } catch (error) {
+      logger.warn(
+        "[speech]: failed to send ws payload: %s",
+        errorStringify(error),
+      );
+    }
+  };
+
+  const drainPendingAudio = () => {
+    if (!recognizeStream) {
+      return;
+    }
+    let chunk: Buffer | undefined;
+    while ((chunk = pendingAudio.shift())) {
+      recognizeStream.write(chunk);
+    }
+  };
+
+  const closeRecognizeStream = () => {
+    if (!recognizeStream) {
+      return;
+    }
+    try {
+      recognizeStream.end();
+    } catch (error) {
+      logger.warn(
+        "[speech]: failed to end recognize stream: %s",
+        errorStringify(error),
+      );
+    }
+    recognizeStream.removeAllListeners();
+    recognizeStream = null;
+    streamReady = false;
+    pendingAudio.length = 0;
+  };
+
+  const startSpeechStream = async (ws: WSContext) => {
+    try {
+      const client = getSpeechClient();
+      await client.initialize();
+      recognizeStream = client.streamingRecognize(
+        streamingConfig as speechProtos.google.cloud.speech.v1.IStreamingRecognitionConfig,
+      ) as unknown as Duplex;
+      streamReady = true;
+      sendWsMessage(ws, {
+        type: "ready",
+        config: streamingConfig,
+      });
+      drainPendingAudio();
+
+      recognizeStream.on("data", (data: any) => {
+        const results = data?.results ?? [];
+        const latestResult = results[results.length - 1];
+        const alternative = latestResult?.alternatives?.[0];
+        if (!alternative?.transcript) {
+          return;
+        }
+        sendWsMessage(ws, {
+          type: "transcript",
+          transcript: alternative.transcript,
+          isFinal: Boolean(latestResult?.isFinal ?? latestResult?.is_final),
+          confidence: alternative.confidence,
+          resultIndex: data?.resultIndex ?? 0,
+        });
+      });
+
+      recognizeStream.on("error", (error: unknown) => {
+        if (wsClosed) {
+          return;
+        }
+        logger.error(
+          "[speech]: google streaming error: %s",
+          errorStringify(error),
+        );
+        sendWsMessage(ws, {
+          type: "error",
+          message: "speech_stream_error",
+          detail: errorStringify(error),
+        });
+        ws.close(1011, "speech_stream_error");
+      });
+
+      recognizeStream.on("end", () => {
+        if (wsClosed) {
+          return;
+        }
+        sendWsMessage(ws, { type: "end" });
+        ws.close(1000, "speech_stream_finished");
+      });
+    } catch (error) {
+      logger.error(
+        "[speech]: unable to initialize speech client: %s",
+        errorStringify(error),
+      );
+      sendWsMessage(ws, {
+        type: "error",
+        message: "speech_client_not_ready",
+        detail: errorStringify(error),
+      });
+      ws.close(1011, "speech_client_not_ready");
+    }
+  };
+
+  return {
+    onOpen: (_event, ws) => {
+      if (!googleSpeechApiKey) {
+        sendWsMessage(ws, {
+          type: "error",
+          message: "GOOGLE_SPEECH_API_KEY is not configured",
+        });
+        ws.close(1011, "speech_api_key_missing");
+        return;
+      }
+      void startSpeechStream(ws);
+    },
+    onMessage: (event, ws) => {
+      const { chunk, control } = normalizeWsPayload(event.data);
+      if (control === "ping") {
+        sendWsMessage(ws, { type: "pong", timestamp: Date.now() });
+        return;
+      }
+      if (control === "stop") {
+        closeRecognizeStream();
+        ws.close(1000, "speech_stream_stopped");
+        return;
+      }
+      if (!chunk || chunk.length === 0) {
+        return;
+      }
+      if (!streamReady || !recognizeStream) {
+        pendingAudio.push(chunk);
+        return;
+      }
+      const wrote = recognizeStream.write(chunk);
+      if (!wrote) {
+        sendWsMessage(ws, {
+          type: "info",
+          message: "speech_stream_backpressure",
+        });
+      }
+    },
+    onClose: () => {
+      wsClosed = true;
+      closeRecognizeStream();
+    },
+    onError: (event, ws) => {
+      if (wsClosed) {
+        return;
+      }
+      logger.error("[speech]: ws error: %s", errorStringify(event));
+      sendWsMessage(ws, {
+        type: "error",
+        message: "speech_ws_error",
+        detail: errorStringify(event),
+      });
+      wsClosed = true;
+      closeRecognizeStream();
+    },
+  };
+}));
 
 // Dialogflow CX Webhook 接口
 app.post("/agent/v1/chat/completion/dialogflow-webhook", async (c) => {
@@ -657,11 +987,12 @@ try {
 
   console.log(`📝 Configuration: PORT=${process.env.PORT}, config.port=${agentConfig?.port}, final port=${port}`);
 
-  serve({
+  const server = serve({
     fetch: app.fetch,
     port,
     hostname: host,
   });
+  injectWebSocket(server);
   console.log(`📡 Server listening on http://${host}:${port}`);
   console.log(`✅ Ready to accept requests`);
 } catch (error) {

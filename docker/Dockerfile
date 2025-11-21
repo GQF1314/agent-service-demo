@@ -1,5 +1,5 @@
 # Use AWS ECR Public mirror to avoid Docker Hub rate limits
-FROM public.ecr.aws/docker/library/node:22-alpine
+FROM public.ecr.aws/docker/library/node:25-alpine
 
 
 WORKDIR /app

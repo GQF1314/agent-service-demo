@@ -13,6 +13,7 @@
         "LLM_MODEL": "anthropic/claude-sonnet-4.5",
         "LLM_MINI_MODEL": "google/gemini-2.5-flash-lite",
         "AI_GATEWAY_API_KEY": "",
-        "JINA_API_KEY": ""
+        "JINA_API_KEY": "",
+        "GOOGLE_SPEECH_API_KEY": ""
     }
 }

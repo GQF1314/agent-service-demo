@@ -1,3 +1,5 @@
 smart-domi-477907-b4bf0e3e424a.json
 .DS_Store
 node_modules
+dist
+logs/dev.log

@@ -16,5 +16,9 @@ export interface AppConfig {
       AI_GATEWAY_API_KEY?: string;
       GOOGLE_VERTEX_API_PROJECT?: string;
       JINA_API_KEY?: string;
+      GOOGLE_SPEECH_API_KEY?: string;
+      asr_google_project_id?: string;
+      asr_google_private_key?: string;
+      asr_google_client_email?: string;
     };
   }
