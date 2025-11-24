@@ -68,16 +68,16 @@ try {
 const agentConfig = config.get<AppConfig["agent"]>("agent");
 const secretConfig = config.get<AppConfig["secret"]>("secret");
 
-const googleSpeechApiKey =
-  process.env.GOOGLE_SPEECH_API_KEY ?? secretConfig.GOOGLE_SPEECH_API_KEY ?? "";
+// const googleSpeechApiKey =
+//   process.env.GOOGLE_SPEECH_API_KEY ?? secretConfig.GOOGLE_SPEECH_API_KEY ?? "";
 
 let cachedSpeechClient: SpeechClient | null = null;
 
 const getSpeechClient = () => {
-  if (!googleSpeechApiKey) {
-    throw new Error("GOOGLE_SPEECH_API_KEY is not configured");
-  }
-  console.log("------googleSpeechApiKey", googleSpeechApiKey);
+  // if (!googleSpeechApiKey) {
+  //   throw new Error("GOOGLE_SPEECH_API_KEY is not configured");
+  // }
+  // console.log("------googleSpeechApiKey", googleSpeechApiKey);
 
   if (!cachedSpeechClient) {
     cachedSpeechClient = new SpeechClient({
@@ -461,14 +461,14 @@ app.get("/agent/v1/speech/ws", upgradeWebSocket((c) => {
 
   return {
     onOpen: (_event, ws) => {
-      if (!googleSpeechApiKey) {
-        sendWsMessage(ws, {
-          type: "error",
-          message: "GOOGLE_SPEECH_API_KEY is not configured",
-        });
-        ws.close(1011, "speech_api_key_missing");
-        return;
-      }
+      // if (!googleSpeechApiKey) {
+      //   sendWsMessage(ws, {
+      //     type: "error",
+      //     message: "GOOGLE_SPEECH_API_KEY is not configured",
+      //   });
+      //   ws.close(1011, "speech_api_key_missing");
+      //   return;
+      // }
       void startSpeechStream(ws);
     },
     onMessage: (event, ws) => {
