@@ -80,11 +80,14 @@ const getSpeechClient = () => {
   // console.log("------googleSpeechApiKey", googleSpeechApiKey);
 
   if (!cachedSpeechClient) {
+    // 手动将 \\n 转换为真实的换行符
+    const privateKey = secretConfig.asr_google_private_key?.replace(/\\n/g, '\n');
+
     cachedSpeechClient = new SpeechClient({
       projectId: secretConfig.asr_google_project_id,
       credentials: {
         client_email: secretConfig.asr_google_client_email,
-        private_key: secretConfig.asr_google_private_key,
+        private_key: privateKey,
       },
     });
   }
